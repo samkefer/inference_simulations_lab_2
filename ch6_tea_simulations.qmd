@@ -209,11 +209,11 @@ Call the simulated experiments `null_model` and use 18 participants per experime
 
 ```{r}
 # Simulate the null distribution
-null_samps <- tibble(sim = 1:1000) |> 
+null_model <- tibble(sim = 1:1000) |> 
   mutate(data = map(sim, \(i) make_tea_data(n_total = 18, delta = 0))) |>  # simulate
   unnest(cols = data) # wrangle
 
-tea_data_null_summary <- null_samps |> #create a new dataset for low n
+tea_data_null_summary <- null_model |> #create a new dataset for low n
   group_by(sim, condition) |>  #select columns 
   summarise(mean_rating = mean(rating)) |> #calculate average for each condition
   group_by(sim) |> #select column
@@ -449,7 +449,11 @@ ggplot(data = tea_data_highn, aes(x=condition, y=rating, col=condition))  +
 
 To do: What does each dot represent? What does the range represent in each graph? What does the confidence interval indicate? What does the SE indicate?
 
+Each dot represents each subject, the range represents the range in ratings (max and min) by condition, CI contains the population parameter 95% of the time, and SE is the standard deviation of the sampling distribution (treatment effect)
+
 To do: how does this change when you use the low-n experiment?
+
+95% CI is \[`r round(tea_ci_lower_ttest, 2)`, `r round(tea_ci_upper_ttest, 2)`\] when n=18
 
 To do: Find the shortcut ggplot function so you don't have to calculate these by hand ever again :)
 
@@ -466,10 +470,10 @@ for (this_sim in 1:1000) {
   this_experiment = null_model %>%
     filter(sim==this_sim) 
   
-  tea_ratings <- filter(this_experiment, condition == "tea first")$rating
-  milk_ratings <- filter(this_experiment, condition == "milk first")$rating
+  tea_ratings <- filter(this_experiment, condition == "tea first")$rating #make tea_ratings from tea first
+  milk_ratings <- filter(this_experiment, condition == "milk first")$rating #make milk_ratings from milk first
   
-  output = t.test(tea_ratings, milk_ratings, var.equal = TRUE)
+  output = t.test(tea_ratings, milk_ratings, var.equal = TRUE) #t test
   
   this_exp_output = tibble(pvalue = output$p.value)
   all_results = bind_rows(all_results, this_exp_output)
@@ -481,13 +485,18 @@ To do: Look at the distribution of p-values (hint: in all_results\$pvalue)
 
 Make a histogram
 
-What is the distribution of p-values when the null is true?
+```{r}
+hist(all_results$pvalue)
+```
+
+What is the distribution of p-values when the null is true? Range from 0-1
 
 Calculate the proportion of p-values that are less than .05 What was our false positive rate?
 
 ```{r}
-# you'll need all_results$pvalue
-hist(all_results$pvalue)
+all_results |>
+  filter(pvalue<.05) |>
+  count()/1000
 ```
 
 ### Now for an experiment when there is actually an effect
@@ -510,11 +519,19 @@ for (this_sim in 1:1000) {
 }
 ```
 
-How often did we fail to reject the null hypothesis? When was our p-value greater than p=.05? What does the distribution of p-values look like?
+How often did we fail to reject the null hypothesis? When was our p-value greater than p=.05?
+
+```{r}
+all_results_high_n |>
+  filter(pvalue>.05) |>
+  count()/1000
+```
+
+What does the distribution of p-values look like?
 
 ```{r}
 # you'll need all_results_high_n$pvalue
-
+hist(all_results_high_n$pvalue)
 ```
 
 # Part 5: Power curves
@@ -538,7 +555,8 @@ Check your function: `estimate_power(48, 1.5)` should be close to 1 minus the mi
 
 ```{r}
 estimate_power <- function(n_total, delta, n_sims = 500) {
-  # your code here
+  p_values <- map_dbl(1:n_sims, \(i) run_one_experiment(n_total, delta)) 
+  mean(p_values < .05)
   
 }
 
@@ -557,14 +575,26 @@ power_curve <- expand_grid(n_total = seq(10, 100, by = 10), # total participants
 To do: Plot the power curves: `n_total` on the x-axis, `power` on the y-axis, and one line per `delta` (hint: `color = factor(delta)`). Add a dashed horizontal line at .8, the conventional target for power (hint: `geom_hline()`).
 
 ```{r}
-
+ power_curve |>
+   ggplot(aes(x=n_total, y=power, color=factor(delta))) +
+    geom_point() +
+   geom_smooth() +
+   geom_hline(yintercept=.8, linetype = "dashed")
 ```
 
 To do: Answer these questions.
 
 1.  What is "power" when delta = 0? Why doesn't it go up with more participants?
+
+    \~0 because 100% chance of missing the effect if it is real, regardless of sample size (beta = 1)
+
 2.  About how many participants do you need for 80% power when delta = 1? When delta = 0.5?
+
+    \~56, \>100
+
 3.  In Part 1, `tea_data` had 18 participants and a true effect of delta = 0.5. About what was its power? If that one experiment had come out significant, how much would you trust it?
+
+    \~12% power and 18 participants would not make me very confident, even if significant!
 
 **Bonus** Extend `n_total` until delta = 0.5 reaches 80% power. How many participants does it take?
 
