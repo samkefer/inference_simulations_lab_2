@@ -78,7 +78,7 @@ tea_data <- make_tea_data(n_total = 18, delta = .5)
 Now, make a new data frame (call it `tea_data_highn`) with an N of 48, or something higher if you want. You need to call the custom function. Keep the same small effect (`delta = .5`): we come back to this experiment in Parts 2 and 3.
 
 ```{r}
-
+tea_data_highn <- make_tea_data(n_total = 48, delta = .5)
 ```
 
 To do: OK, look at these data. How long are they, what are the column names? Look at them in your console by copy and pasting the variable names into R.
@@ -88,7 +88,15 @@ Call `summary(tea_data)` and look at the outputs. Call `head(tea_data)` to look 
 To do: Write basic tidyverse code to calculate the mean of each condition (hint: use `group_by` and `summarize`).
 
 ```{r}
+by_condition <- tea_data |>
+  group_by(condition)|>
+  summarize(avg = mean(rating),
+            num_participants = length(rating))
 
+by_condition_highn <- tea_data_highn |>
+  group_by(condition)|>
+  summarize(avg = mean(rating),
+            num_participants = length(rating))
  
 ```
 
@@ -108,7 +116,14 @@ out_low_n <- tea_data %>%
 
 out_high_n <- tea_data_highn %>%
   t.test(rating ~ condition, data = ., var.equal = TRUE) 
+
+out_low_n$p.value
+out_high_n$p.value
+out_low_n$statistic
+out_high_n$statistic
 ```
+
+When n is low (n=18), p = `r round((out_low_n$p.value), 2)` and t = `r round((out_low_n$statistic), 2)`. When n is high (n=48), p = `r round((out_high_n$p.value),2)` and t = `r round((out_high_n$statistic),2)`. In summary, increasing sample size decreased our p-value and increased our t-value.
 
 ### Simulate 1000 experiments
 
@@ -125,7 +140,9 @@ samps <- tibble(sim = 1:1000) |>
 OK, copy this but now change it so that you 48 participants per experiment
 
 ```{r}
-samps_highn <-...
+samps_highn <-tibble(sim = 1:1000) |> 
+  mutate(data = map(sim, \(i) make_tea_data(n_total = 48, delta = 1.5))) |>  # simulate
+  unnest(cols = data)
 ```
 
 ### Summarize both of these simulations
@@ -139,21 +156,21 @@ To do: Comment what each line of code is doing to check your understanding, and 
 Bonus: Figure out a way to do this that is better than I what I did (some mix of base R and tidyverse, I'm sure there's a tidyverse only way)
 
 ```{r}
-tea_data_summary <- samps |>
-  group_by(sim, condition) |> 
-  summarise(mean_rating = mean(rating)) |> 
-  group_by(sim) |> 
+tea_data_summary <- samps |> #create a new dataset for low n
+  group_by(sim, condition) |>  #select columns 
+  summarise(mean_rating = mean(rating)) |> #calculate average for each condition
+  group_by(sim) |> #select column
   summarise(delta = mean_rating[condition == "milk first"] -
-              mean_rating[condition == "tea first"])
+              mean_rating[condition == "tea first"]) #calculate difference in rating by condition
 ```
 
 ```{r}
-tea_data_highn_summary <- samps_highn |>
-  group_by(sim, condition) |> 
-  summarise(mean_rating = mean(rating)) |> 
-  group_by(sim) |> 
+tea_data_highn_summary <- samps_highn |> #create a new dataset for high n
+  group_by(sim, condition) |> #select columns
+  summarise(mean_rating = mean(rating)) |> #calculate average for each condition
+  group_by(sim) |> #select column
   summarise(delta = mean_rating[condition == "milk first"] -
-              mean_rating[condition == "tea first"])
+              mean_rating[condition == "tea first"]) #calculate difference in rating by condition
 ```
 
 ### Plot difference for low-n
@@ -161,7 +178,9 @@ tea_data_highn_summary <- samps_highn |>
 Let's make a plot to plot the differences in ratings across conditions for the low-n condition. You'll need to use ggplot or `hist`
 
 ```{r}
-
+tea_data_summary |>
+  ggplot(aes(x=delta))+
+  geom_histogram(bins=20)
 ```
 
 ### Plot difference for higher-n
@@ -169,7 +188,9 @@ Let's make a plot to plot the differences in ratings across conditions for the l
 To do: What's different about this distribution vs the one we just plotted?
 
 ```{r}
-
+tea_data_highn_summary |>
+  ggplot(aes(x=delta))+
+  geom_histogram(bins=20)
 ```
 
 **Bonus** What happens if you run it again, but this time try changing the variance / mean of the effect when you change the `delta` and `sigma` values in the data simulation.
@@ -188,13 +209,24 @@ Call the simulated experiments `null_model` and use 18 participants per experime
 
 ```{r}
 # Simulate the null distribution
-  
+null_samps <- tibble(sim = 1:1000) |> 
+  mutate(data = map(sim, \(i) make_tea_data(n_total = 18, delta = 0))) |>  # simulate
+  unnest(cols = data) # wrangle
+
+tea_data_null_summary <- null_samps |> #create a new dataset for low n
+  group_by(sim, condition) |>  #select columns 
+  summarise(mean_rating = mean(rating)) |> #calculate average for each condition
+  group_by(sim) |> #select column
+  summarise(delta = mean_rating[condition == "milk first"] -
+              mean_rating[condition == "tea first"]) #calculate difference in rating by condition
 ```
 
 Visualize what this null distribution actually looks like.
 
 ```{r}
-
+tea_data_null_summary |>
+  ggplot(aes(x=delta))+
+  geom_histogram(bins=20)
 ```
 
 ### Method 2: Shuffling
@@ -487,7 +519,7 @@ How often did we fail to reject the null hypothesis? When was our p-value greate
 
 # Part 5: Power curves
 
-In Part 4 you counted how often experiments with 48 participants and a true effect of delta = 1.5 came out significant. That proportion is the study's **power**: the probability of getting p < .05 when there really is an effect. Here you will estimate power for many sample sizes and effect sizes at once, and plot it.
+In Part 4 you counted how often experiments with 48 participants and a true effect of delta = 1.5 came out significant. That proportion is the study's **power**: the probability of getting p \< .05 when there really is an effect. Here you will estimate power for many sample sizes and effect sizes at once, and plot it.
 
 `run_one_experiment()` simulates one experiment with our `make_tea_data()` function and returns its p-value. Run this chunk a few times: you get a different p-value each time.
 
@@ -500,7 +532,7 @@ run_one_experiment <- function(n_total, delta) {
 run_one_experiment(n_total = 48, delta = 1.5)
 ```
 
-To do: Fill in `estimate_power()` so that it runs `n_sims` experiments and returns the proportion of them with p < .05. Hint: `map_dbl(1:n_sims, \(i) run_one_experiment(n_total, delta))` gives you a vector of `n_sims` p-values.
+To do: Fill in `estimate_power()` so that it runs `n_sims` experiments and returns the proportion of them with p \< .05. Hint: `map_dbl(1:n_sims, \(i) run_one_experiment(n_total, delta))` gives you a vector of `n_sims` p-values.
 
 Check your function: `estimate_power(48, 1.5)` should be close to 1 minus the miss rate you found in Part 4, and `estimate_power(48, 0)` should be close to .05.
 
